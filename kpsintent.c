@@ -2,7 +2,35 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+
+#ifdef __linux__
 #include <alsa/asoundlib.h>
+static snd_pcm_t *global_pcm_handle = NULL;
+#elif defined(__APPLE__)
+#include <AudioToolbox/AudioToolbox.h>
+#include <pthread.h>
+#define NUM_BUFFERS 3
+static AudioQueueRef global_audio_queue;
+static AudioQueueBufferRef global_buffers[NUM_BUFFERS];
+static int global_buffer_used[NUM_BUFFERS] = {0};
+static pthread_mutex_t global_audio_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t global_audio_cond = PTHREAD_COND_INITIALIZER;
+static int global_audio_initialized = 0;
+
+static void audio_queue_callback(void *user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
+    (void)user_data; (void)queue;
+    pthread_mutex_lock(&global_audio_mutex);
+    for (int i = 0; i < NUM_BUFFERS; i++) {
+        if (global_buffers[i] == buffer) {
+            global_buffer_used[i] = 0;
+            break;
+        }
+    }
+    pthread_cond_signal(&global_audio_cond);
+    pthread_mutex_unlock(&global_audio_mutex);
+}
+#endif
+
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
@@ -12,9 +40,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-static snd_pcm_t *global_pcm_handle = NULL;
-
-static int init_alsa_shared() {
+static int audio_init() {
+#ifdef __linux__
     if (global_pcm_handle) return 0;
     int err;
     if ((err = snd_pcm_open(&global_pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
@@ -22,12 +49,72 @@ static int init_alsa_shared() {
     }
     if ((err = snd_pcm_set_params(global_pcm_handle,
                                   SND_PCM_FORMAT_S16_LE,
-                                  SND_PCM_ACCESS_RW_INTERLEAVED, // Interleaved access
-                                  2, SAMPLE_RATE, 1, 500000)) < 0) { // 2 channels for stereo
+                                  SND_PCM_ACCESS_RW_INTERLEAVED,
+                                  2, SAMPLE_RATE, 1, 500000)) < 0) {
         return err;
     }
     return 0;
+#elif defined(__APPLE__)
+    if (global_audio_initialized) return 0;
+    AudioStreamBasicDescription format;
+    format.mSampleRate = SAMPLE_RATE;
+    format.mFormatID = kAudioFormatLinearPCM;
+    format.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
+    format.mBitsPerChannel = 16;
+    format.mChannelsPerFrame = 2;
+    format.mBytesPerPacket = 4;
+    format.mBytesPerFrame = 4;
+    format.mFramesPerPacket = 1;
+    format.mReserved = 0;
+
+    OSStatus status = AudioQueueNewOutput(&format, audio_queue_callback, NULL, NULL, NULL, 0, &global_audio_queue);
+    if (status != noErr) return -1;
+
+    for (int i = 0; i < NUM_BUFFERS; i++) {
+        AudioQueueAllocateBuffer(global_audio_queue, 4096, &global_buffers[i]);
+        global_buffer_used[i] = 0;
+    }
+
+    AudioQueueStart(global_audio_queue, NULL);
+    global_audio_initialized = 1;
+    return 0;
+#else
+    return -1;
+#endif
 }
+
+static void audio_write(short *data, int frames) {
+#ifdef __linux__
+    snd_pcm_sframes_t res = snd_pcm_writei(global_pcm_handle, data, frames);
+    if (res < 0) {
+        snd_pcm_prepare(global_pcm_handle);
+    }
+#elif defined(__APPLE__)
+    pthread_mutex_lock(&global_audio_mutex);
+    int buffer_idx = -1;
+    while (buffer_idx == -1) {
+        for (int i = 0; i < NUM_BUFFERS; i++) {
+            if (!global_buffer_used[i]) {
+                buffer_idx = i;
+                break;
+            }
+        }
+        if (buffer_idx == -1) {
+            pthread_cond_wait(&global_audio_cond, &global_audio_mutex);
+        }
+    }
+
+    global_buffer_used[buffer_idx] = 1;
+    AudioQueueBufferRef buffer = global_buffers[buffer_idx];
+    int bytes = frames * 4;
+    if (bytes > (int)buffer->mAudioDataBytesCapacity) bytes = buffer->mAudioDataBytesCapacity;
+    memcpy(buffer->mAudioData, data, bytes);
+    buffer->mAudioDataByteSize = bytes;
+    AudioQueueEnqueueBuffer(global_audio_queue, buffer, 0, NULL);
+    pthread_mutex_unlock(&global_audio_mutex);
+#endif
+}
+
 
 typedef struct {
     float *ring_buffer;
@@ -154,10 +241,8 @@ static int l_play_string(lua_State *L) {
     float phaser_fb = (float)luaL_optnumber(L, -1, 0.0);
     lua_pop(L, 3);
 
-    snd_pcm_sframes_t frames;
-
-    if (init_alsa_shared() < 0) {
-        return luaL_error(L, "Failed to initialize ALSA shared handle");
+    if (audio_init() < 0) {
+        return luaL_error(L, "Failed to initialize audio backend");
     }
 
     StringState *strings = (StringState *)malloc(sizeof(StringState) * num_notes);
@@ -283,10 +368,7 @@ static int l_play_string(lua_State *L) {
             output_pcm[i*2] = output_pcm[i*2+1] = (short)(mixed_sample * env * final_vol_scale); // Mono output to both channels
         }
 
-        frames = snd_pcm_writei(global_pcm_handle, output_pcm, chunk);
-        if (frames < 0) {
-            frames = snd_pcm_prepare(global_pcm_handle);
-        }
+        audio_write(output_pcm, chunk);
         processed_frames += chunk;
     }
 
@@ -475,14 +557,14 @@ static int l_play_8bit(lua_State *L) {
         }
     }
 
-    if (init_alsa_shared() < 0) {
+    if (audio_init() < 0) {
         for(int t=0; t<num_tracks; t++) { 
             free(tracks[t].frequencies); free(tracks[t].phases); 
             if (tracks[t].delay_buffer_L) free(tracks[t].delay_buffer_L);
             if (tracks[t].delay_buffer_R) free(tracks[t].delay_buffer_R);
         }
         free(tracks);
-        return luaL_error(L, "Failed to initialize ALSA shared handle");
+        return luaL_error(L, "Failed to initialize audio backend");
     }
 
     short *output_pcm = (short *)malloc(sizeof(short) * 1024 * 2); // Double size for stereo
@@ -627,9 +709,7 @@ static int l_play_8bit(lua_State *L) {
             output_pcm[i*2+1] = (short)(final_mixed_R * 32767.0f);
         }
 
-        if (snd_pcm_writei(global_pcm_handle, output_pcm, chunk) < 0) {
-            snd_pcm_prepare(global_pcm_handle);
-        }
+        audio_write(output_pcm, chunk);
         processed_frames += chunk;
     }
 

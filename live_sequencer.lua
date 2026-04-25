@@ -1,7 +1,7 @@
 local kps = require("kpsintent")
 
 -- The file you will edit live
-local PATTERN_PATH = "/home/elihu/Documents/kpsintent/pattern.lua"
+local PATTERN_PATH = "./pattern.lua"
 
 local function start_sequencer()
     print("========================================")

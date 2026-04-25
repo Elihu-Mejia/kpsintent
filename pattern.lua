@@ -1,7 +1,7 @@
 -- Edit this table and save the file to update the sound live!
 return {
     bpm = 140.0, -- Beats Per Minute (120 BPM = 2.0s loop for 4 beats)
-    stop = true,
+    stop = false,
     tracks = {
         {
             frequency = {440.0, 554.37, 659.25, 830.61},
