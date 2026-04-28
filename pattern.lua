@@ -1,5 +1,5 @@
 return {
-    bpm = 100.0,
+    bpm = 120.0,
     tracks = {
         { -- Atmospheric Pad
             frequency = "A",
@@ -29,12 +29,12 @@ return {
             lpf_q = 1.0
         },
         { -- Atmospheric Pad
-            frequency = "C5",
-            --sine = true,          -- Clean source makes glitches pop
+            frequency = "C",
+            sine = true,          -- Clean source makes glitches pop
             unison = 7,          -- Stack 7 detuned oscillators
             detune = 0.1,       -- Lush chorus width
             volume = 0.7,
-            attack = 1.0,        -- Long swell
+            attack = 0,        -- Long swell
             release = 1,       -- Long tail
             vowel = 0,         -- Center on 'E'
             vowel_lfo_freq = 1, -- Modulate vowel every whole note
