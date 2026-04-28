@@ -1,51 +1,59 @@
--- Edit this table and save the file to update the sound live!
 return {
-    bpm = 140.0, -- Beats Per Minute (120 BPM = 2.0s loop for 4 beats)
-    stop = false,
+    bpm = 100.0,
     tracks = {
-        {
-            frequency = {440.0, 554.37, 659.25, 830.61},
-            arp_speed = 1/16,    -- 16th notes
-            arp_random = true,
-            duty_cycle = 0.25,
-            pwm_lfo_freq = 1/4,  -- Sync LFO cycle to quarter notes
-            pwm_lfo_depth = 0.2,
-            bit_depth = 5,
-            downsample = 7,
+        { -- Atmospheric Pad
+            frequency = "A",
+            sine = true,          -- Clean source makes glitches pop
+            unison = 7,          -- Stack 7 detuned oscillators
+            detune = 0.2,       -- Lush chorus width
             volume = 0.7,
-            solo = false, -- Now only this track will play
-            release = 0.0,
-            triangle = true,
-            attack = 0.2,
+            attack = 1.0,        -- Long swell
+            release = 1,       -- Long tail
+            vowel = 0,         -- Center on 'E'
+            vowel_lfo_freq = 1, -- Modulate vowel every whole note
+            vowel_lfo_depth = 0.2, -- Morph significantly
+            vocal_grit = 0,   -- Add a bit of breathiness
+            glitch_amount = 0.9, -- 40% intensity for digital artifacts
+            fm_freq_ratio = 1.0,
+            fm_amount = 0.1,     -- Subtle shimmer
+            delay_time = 1/64,
+            delay_feedback = 0.3,
+            stutter_speed = 1/16, -- Fast pulsing
+            stutter_gate = 0.9,
+            stutter_random = 0.9, 
+            reverb_mix = 0.3,    
+            reverb_room = 0.8,  
+            reverb_damp = 0.4,   
             delay_is_pingpong = true,
+            lpf_freq = 1200,
+            lpf_q = 1.0
         },
-        { -- Layer 2: Fast Arp
-            frequency = {440.0, 554.37, 659.25, 830.61},
-            arp_speed = 1/32,    -- 32nd notes
-            arp_random = true,
-            duty_cycle = 0.5,
-            pwm_lfo_freq = 1/4,
-            pwm_lfo_depth = 0.2,
-            bit_depth = 3,
-            downsample = 2,
-            volume = 0.2,
-            release = 0,
-            attack = 0.2,
-            mute = false, -- Silencing this layer
+        { -- Atmospheric Pad
+            frequency = "C5",
+            --sine = true,          -- Clean source makes glitches pop
+            unison = 7,          -- Stack 7 detuned oscillators
+            detune = 0.1,       -- Lush chorus width
+            volume = 0.7,
+            attack = 1.0,        -- Long swell
+            release = 1,       -- Long tail
+            vowel = 0,         -- Center on 'E'
+            vowel_lfo_freq = 1, -- Modulate vowel every whole note
+            vowel_lfo_depth = 0.2, -- Morph significantly
+            vocal_grit = 0,   -- Add a bit of breathiness
+            glitch_amount = 0.3, -- 40% intensity for digital artifacts
+            fm_freq_ratio = 1.0,
+            fm_amount = 0.1,     -- Subtle shimmer
+            delay_time = 1/4,
+            delay_feedback = 0.3,
+            stutter_speed = 1/64, -- Fast pulsing
+            stutter_gate = 0.9,
+            stutter_random = 0.9, 
+            reverb_mix = 0.39,    
+            reverb_room = 0.8,  
+            reverb_damp = 0.24,   
+            delay_is_pingpong = true,
+            lpf_freq = 900,
+            lpf_q = 1.0
         },
-        { -- Layer 3: Echo/Delay track
-            frequency = {110.0, 164.81, 220.0, 277.18},
-            arp_speed = 1/16,
-            duty_cycle = 0.25,
-            delay_time = 1/8,       -- Sync delay to 8th notes
-            delay_feedback = 0.85,
-            delay_damping = 0.6,
-            delay_is_pingpong = true, -- Enable ping-pong mode
-            bit_depth = 4, 
-            volume = 0.3,
-            attack = 0.01,
-            release = 0.1,
-            arp_random = true
-        }
     }
 }
